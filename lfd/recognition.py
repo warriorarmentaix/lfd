@@ -9,6 +9,7 @@ import networkx as nx
 from matplotlib.delaunay import Triangulation
 import lfd
 from lfd import registration, warping
+#import registration, warping
 from scipy import sparse
 import jds_utils.math_utils as mu
 
@@ -60,6 +61,7 @@ def calc_geodesic_distances(xyz, res=.03):
     Note that we generate the graph by projecting to 2D
     """
     x,y = xyz[:,:2].T
+    print x,y
     tri = Triangulation(x,y)
     G = nx.Graph()
     #G.add_nodes_from(xrange(len(xyz)))
@@ -74,6 +76,38 @@ def calc_geodesic_distances(xyz, res=.03):
     finitevals = distmat[np.isfinite(distmat)]
     distmat[~np.isfinite(distmat)] = finitevals.max() * 3
     return distmat
+
+def calc_distortion(old_xyz, f):
+    trans_xyz = f.transform_points(old_xyz)
+    return calc_distortion_pc(old_xyz, trans_xyz)
+
+def calc_distortion_pc(old_xyz, new_xyz):
+    old_geo_dist = calc_geodesic_distances(old_xyz)
+    new_geo_dist = calc_geodesic_distances(new_xyz)
+    diff = old_geo_dist - new_geo_dist
+    diff = np.absolute(diff)
+    distortion = np.amax(diff)
+    return distortion
+
+
+def calc_distortion_norm(old_xyz, f, norm):
+    trans_xyz = f.transform_points(old_xyz)
+    return calc_distortion_norm_pc(old_xyz, trans_xyz, norm)
+
+def calc_distortion_norm_pc(old_xyz, new_xyz, norm):
+    old_geo_dist = calc_geodesic_distances(old_xyz)
+    new_geo_dist = calc_geodesic_distances(new_xyz)
+    diff = old_geo_dist - new_geo_dist
+    total = 0
+    count = 0
+    for i in range(diff.shape[0]):
+        for j in range(diff.shape[1]):
+            if j > i:
+                term = diff[i,j] ** norm
+                total = total + term
+                count = count + 1
+    distortion = (total / count) ** (float(1)/norm)
+    return distortion
 
 
 def calc_match_score(xyz0, xyz1, dists0 = None, dists1 = None, plotting = False):
