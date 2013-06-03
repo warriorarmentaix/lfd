@@ -90,11 +90,11 @@ def calc_distortion_pc(old_xyz, new_xyz):
     return distortion
 
 
-def calc_distortion_norm(old_xyz, f, norm):
+def calc_pe(old_xyz, f, norm):
     trans_xyz = f.transform_points(old_xyz)
-    return calc_distortion_norm_pc(old_xyz, trans_xyz, norm)
+    return calc_pe_pc(old_xyz, trans_xyz, norm)
 
-def calc_distortion_norm_pc(old_xyz, new_xyz, norm):
+def calc_pe_pc(old_xyz, new_xyz, norm):
     old_geo_dist = calc_geodesic_distances(old_xyz)
     new_geo_dist = calc_geodesic_distances(new_xyz)
     diff = old_geo_dist - new_geo_dist
