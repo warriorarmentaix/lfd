@@ -12,8 +12,8 @@ from lfd import registration, warping
 #import registration, warping
 from scipy import sparse
 import jds_utils.math_utils as mu
-
-
+from munkres import Munkres
+import math
 
 def make_sampling_matrix(inds_list, n_orig):
     """
@@ -61,7 +61,7 @@ def calc_geodesic_distances(xyz, res=.03):
     Note that we generate the graph by projecting to 2D
     """
     x,y = xyz[:,:2].T
-    print x,y
+    #print x,y
     tri = Triangulation(x,y)
     G = nx.Graph()
     #G.add_nodes_from(xrange(len(xyz)))
@@ -108,6 +108,80 @@ def calc_distortion_norm_pc(old_xyz, new_xyz, norm):
                 count = count + 1
     distortion = (total / count) ** (float(1)/norm)
     return distortion
+
+
+def calc_shape_context_cost(old_xyz, f):
+    old_xyz, ds = downsample(old_xyz)
+    old_xyz, ds = downsample(old_xyz)
+    trans_xyz = f.transform_points(old_xyz)
+    print old_xyz.shape
+    print trans_xyz.shape
+    old_xy = old_xyz[:,:2]
+    trans_xy = trans_xyz[:,:2]
+    
+    old_histograms = generate_log_polar_hist(old_xy)
+    trans_histograms = generate_log_polar_hist(trans_xy)
+    #print old_histograms
+    point_cost = compute_point_cost(old_histograms, trans_histograms)
+    print point_cost
+    indicator = np.where(point_cost==0,1,0)
+    tot = np.sum(indicator, axis=1)
+    t = np.sum(tot, axis=0)
+    print t
+    print 'got point cost'
+    print point_cost[3,3] == 0
+    cost = hungarian_method(point_cost)
+    return cost
+
+# Given a list of 2D points, generate a list of log polar shape context histograms, one for each point.
+def generate_log_polar_hist(xy):
+    distance = np.zeros((len(xy),len(xy)))
+    angle = np.zeros((len(xy),len(xy)))
+    for i in range(len(xy)):
+        for j in range(len(xy)):
+            if i == j:
+                continue
+            one = xy[i]
+            two = xy[j]
+            dist = math.sqrt(abs(one[0]-two[0])**2 + abs(one[1]-two[1])**2)
+            distance[i][j] = math.log(dist)
+            angle[i][j] = math.atan2(two[1]-one[1], two[0]-one[0])*180/math.pi + 180
+    distance = distance / np.median(distance)
+    unit_dist = np.max(distance) / 5
+    unit_angle = np.max(angle) / 12
+    hist = np.zeros((len(xy),70))
+    for i in range(5):
+        for j in range(12):
+            indicator = np.where(np.logical_and(np.logical_and(distance>=(i*unit_dist), distance<=((i+1)*unit_dist)),np.logical_and(angle>=(j*unit_angle), angle<=((j+1)*unit_angle))), 1, 0)
+            count = np.sum(indicator, axis=1)
+            element = i * 12 + j
+            hist[:,element] = count
+    return hist
+# Given a two lists of log polar histograms, compute the C_ij(total) for all points
+def compute_point_cost(old_list, new_list):
+    point_cost = np.zeros((len(old_list),len(new_list)))
+    for i in range(len(old_list)):
+        for j in range(len(new_list)):
+            g = old_list[i]
+            h = new_list[j]
+            point_cost[i][j] = 0.5 * np.sum(np.square(g-h)/(g+h+1))
+    return point_cost
+
+# Find a permutation such that the sum of costs is minimum. Return that cost.
+def hungarian_method(point_cost):
+    pc = np.empty_like(point_cost)
+    pc[:] = point_cost
+    m = Munkres()
+    indexes = m.compute(point_cost)
+    total = 0
+    print indexes
+    print 'just summing now'
+    print indexes[3]
+    row, col = indexes[3]
+    print pc[row,col]
+    for row, column in indexes:
+        total += pc[row][column]
+    return total
 
 
 def calc_match_score(xyz0, xyz1, dists0 = None, dists1 = None, plotting = False):
